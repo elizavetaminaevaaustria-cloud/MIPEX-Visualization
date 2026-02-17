@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Migrant Integration Policy Index (MIPEX)</title>
+
+  <!-- Vega libs -->
+  <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+
+  <!-- Roboto font -->
+  <link
+    href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap"
+    rel="stylesheet"
+  />
+
+  <style>
+    body {
+      font-family: "Roboto", sans-serif;
+      margin: 0;
+      background: #ffffff;
+    }
+
+    #vis {
+      width: 100vw;         
+      height: 100vh;       
+      max-width: 1200px;   
+      max-height: 700px;    
+      margin: 0 auto;
+      position: relative;  
+    }
+
+    #compare-selects {
+      position: absolute;
+      left: 19px;
+      bottom: 65px;
+      width: 460px;
+      display: none;
+      display: flex;
+      justify-content: center;
+      column-gap: 40px;
+    }
+
+    #compare-selects select {
+      width: 180px;
+      padding: 4px 6px;
+      font-family: "Roboto", sans-serif;
+      font-size: 12px;
+      border-radius: 6px;
+      border: 1px solid #cccccc;
+    }
+  </style>
+</head>
+<body>
+  <div id="vis"></div>
+
+  <div id="compare-selects">
+    <div>
+      <select id="country1Select"></select>
+    </div>
+    <div>
+      <select id="country2Select"></select>
+    </div>
+  </div>
+
+  <script>
+    const spec = {
+      "$schema": "https://vega.github.io/schema/vega/v6.json",
+      "description": "EU map + single country radar + comparison radar",
+      "width": 1200,
+      "height": 650,
+      "autosize": "none",
+
+      "config": {
+        "font": "Roboto",
+        "axis": {"labelFont": "Roboto", "titleFont": "Roboto"},
+        "legend": {"labelFont": "Roboto", "titleFont": "Roboto"},
+        "title": {"font": "Roboto"}},
+
+      "signals": [
+        {"name": "tx", "update": "width * 0.6"},
+        {"name": "ty", "update": "height / 2"},
+        {"name": "showCompare", "value": false, "on": [
+            { "events": "@compareButton:click, @compareButtonLabel:click", "update": "true" },
+            { "events": "@compareCloseButton:click", "update": "false" },
+            { "events": "@background:click", "update": "false" }]},
+        {"name": "selectedCountry","value": null,"on": [
+            {"events": "@countries:click", "update": "datum.properties.name"},
+            {"events": "@singleCloseButton:click", "update": "null"},
+            {"events": "@background:click", "update": "null"}]},
+        {"name": "country1", "value": "Austria","on": [{"events": "@countries:click", "update": "datum.properties.name"}]},
+        {"name": "country2", "value": "Belgium"},
+        {"name": "singleCardVisible", "update": "selectedCountry != null && !showCompare"},
+        {"name": "compareCardVisible", "update": "showCompare"}],
+
+      "projections": [
+        {"name": "projection",
+          "type": "mercator",
+          "center": [4, 55],
+          "scale": 630,
+          "translate": [{ "signal": "tx" },{ "signal": "ty" }]}],
+
+      "data": [
+        {"name": "world",
+          "url": "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json",
+          "format": { "type": "topojson", "feature": "countries" },
+          "transform": [
+            {"type": "filter",
+              "expr": "indexof(['Austria','Belgium','Bulgaria','Croatia','Cyprus','Czechia','Denmark','Estonia','Finland','France','Germany','Greece','Hungary','Ireland','Italy','Latvia','Lithuania','Luxembourg','Malta','Netherlands','Poland','Portugal','Romania','Slovakia','Slovenia','Spain','Sweden'], datum.properties.name) >= 0"
+            }]},
+
+        {"name": "scores",
+          "url": "https://raw.githubusercontent.com/tzubarevaa-cloud/eu-scores-map/refs/heads/main/EU%20indicators.csv",
+          "format": { "type": "csv", "parse": "auto" }},
+
+        {"name": "merged", "source": "world", "transform": [
+            {"type": "lookup",
+              "from": "scores",
+              "key": "Country Name",
+              "fields": ["properties.name"],
+              "values": ["Overall Score (with health)"],
+              "as": ["Overall Score (with health)"]}]},
+
+        {"name": "euIndicators", "source": "scores"},
+        
+        {"name": "indicators","values": [
+            {"id": 0, "field": "Labour Market Mobility Strand", "label": "Labour Market\nMobility", "angle": 0.0},
+            {"id": 1, "field": "Family Reunification Strand", "label": "Family\nReunification", "angle": 0.7853981633974483},
+            {"id": 2, "field": "Education Strand", "label": "Education", "angle": 1.5707963267948966},
+            {"id": 3, "field": "Political Participation Strand", "label": "Political\nParticipation", "angle": 2.356194490192345},
+            {"id": 4, "field": "Permanent Residence Strand", "label": "Permanent\nResidence", "angle": 3.141592653589793},
+            {"id": 5, "field": "Citizenship Strand", "label": "Citizenship", "angle": 3.9269908169872414},
+            {"id": 6, "field": "Antidiscrimination Strand", "label": "Antidiscrimination", "angle": 4.71238898038469},
+            {"id": 7, "field": "Health Strand", "label": "Health", "angle": 5.497787143782138}]},
+
+        {"name": "countrySingle",
+          "source": "euIndicators",
+          "transform": [{"type": "filter", "expr": "selectedCountry != null && datum['Country Name'] == selectedCountry"}]},
+
+        {"name": "radarSingle",
+          "source": "countrySingle",
+          "transform": [
+            {"type": "fold",
+              "fields": [
+                "Labour Market Mobility Strand",
+                "Family Reunification Strand",
+                "Education Strand",
+                "Political Participation Strand",
+                "Permanent Residence Strand",
+                "Citizenship Strand",
+                "Antidiscrimination Strand",
+                "Health Strand"],
+              "as": ["indicatorField", "value"]},
+            {"type": "lookup",
+              "from": "indicators",
+              "key": "field",
+              "fields": ["indicatorField"],
+              "as": ["ind"]},
+            { "type": "formula", "as": "angle", "expr": "datum.ind.angle" },
+            { "type": "formula", "as": "label", "expr": "datum.ind.label" },
+            { "type": "formula", "as": "order", "expr": "datum.ind.id" },
+            {"type": "formula", "as": "radius", "expr": "scale('radius', datum.value)"}]},
+
+        {"name": "country1Data",
+          "source": "euIndicators",
+          "transform": [
+            { "type": "filter", "expr": "datum['Country Name'] == country1" }]},
+
+        {"name": "country2Data",
+          "source": "euIndicators",
+          "transform": [{ "type": "filter", "expr": "datum['Country Name'] == country2" }]},
+
+        {"name": "radar1", "source": "country1Data","transform": [
+            {"type": "fold",
+              "fields": ["Labour Market Mobility Strand", "Family Reunification Strand", "Education Strand", "Political Participation Strand", "Permanent Residence Strand", "Citizenship Strand", "Antidiscrimination Strand", "Health Strand"],
+              "as": ["indicatorField", "value"]},
+            {"type": "lookup", "from": "indicators", "key": "field", "fields": ["indicatorField"], "as": ["ind"]},
+            { "type": "formula", "as": "angle", "expr": "datum.ind.angle" },
+            { "type": "formula", "as": "label", "expr": "datum.ind.label" },
+            { "type": "formula", "as": "order", "expr": "datum.ind.id" },
+            {"type": "formula", "as": "radius", "expr": "scale('radius', datum.value)"}]},
+
+        {"name": "radar2", "source": "country2Data", "transform": [
+            {"type": "fold",
+             "fields": ["Labour Market Mobility Strand", "Family Reunification Strand", "Education Strand", "Political Participation Strand", "Permanent Residence Strand", "Citizenship Strand", "Antidiscrimination Strand", "Health Strand"],
+              "as": ["indicatorField", "value"]},
+            {"type": "lookup",
+              "from": "indicators",
+              "key": "field",
+              "fields": ["indicatorField"],
+              "as": ["ind"]},
+            {"type": "formula", "as": "angle", "expr": "datum.ind.angle"},
+            {"type": "formula", "as": "label", "expr": "datum.ind.label"},
+            {"type": "formula", "as": "order", "expr": "datum.ind.id"},
+            {"type": "formula", "as": "radius", "expr": "scale('radius', datum.value)"}]},
+
+        {"name": "axes", "source": "indicators", "transform": [{"type": "formula", "as": "radius", "expr": "scale('radius', 100)"}]},
+
+        {"name": "frame", "source": "indicators","transform": [
+            { "type": "formula", "as": "radius", "expr": "scale('radius', 100)" },
+            { "type": "formula", "as": "order", "expr": "datum.id" }]}],
+
+      "scales": [
+        {"name": "colorScale",
+          "type": "linear",
+          "domain": { "data": "scores", "field": "Overall Score (with health)" },
+          "range": ["#fde0dd", "#49006a"]},
+          
+        {"name": "radius",
+          "type": "linear",
+          "domain": [0, 100],
+          "range": [0, 115]}],
+      
+      "legends": [{
+        "fill": "colorScale",
+        "type": "gradient",
+        "title": "",
+        "orient": "none",
+        "gradientLength": 230,
+        "labelFontSize": 11,
+        "values": [100, 80, 60, 40, 20, 0],
+        
+        "encode": {
+          "legend": {
+            "update": {
+              "x": { "value": 1050 },
+              "y": { "value": 170 }}},
+              
+              "gradient": {
+                "update": {
+                  "stroke": { "value": "#bbbbbb" },
+                  "strokeWidth": { "value": 1 },
+                  "width": { "value": 16 }}},
+                  
+              "labels": {
+                "update": {
+                  "fill": { "value": "#444444" },
+                  "dx": { "value": 6 },
+                  "fontSize": { "value": 11 },
+                  "align": { "value": "left" },
+                  "baseline": { "value": "middle" },
+                  "y": {"signal": "(1 - datum.value/100) * 230"+
+                  "+(datum.value == 0 ? -6 : 0)" +
+                  "+ (datum.value == 100 ? 6 : 0)"}}}}}],
+
+      "marks": [
+        {"name": "background",
+          "type": "rect",
+          "encode": {
+            "enter": {
+              "x": { "value": 0 },
+              "y": { "value": 0 },
+              "width": { "signal": "width" },
+              "height": { "signal": "height" },
+              "fill": { "value": "white" },
+              "fillOpacity": { "value": 0 }}}},
+
+        /* ---------- TOP LEFT CORNER: title, background information, country comparison button ---------- */
+        {"type": "group",
+          "name": "headerBlock",
+          "encode": {
+            "enter": {
+              "x": { "value": 20 },
+              "y": { "value": 20 },
+              "width": { "value": 450 }}},
+          "marks": [
+            {"type": "text",
+              "encode": {
+                "enter": {
+                  "x": { "value": 0 },
+                  "y": { "value": 0 },
+                  "text": {"value": "Migrant Integration Policy Index (MIPEX)"},
+                  "fontSize": { "value": 26 },
+                  "fontWeight": { "value": "bold" },
+                  "fill": { "value": "#49006a" },
+                  "baseline": { "value": "top" }}}},
+
+            {"type": "rect",
+              "encode": {
+                "enter": {
+                  "x": { "value": 0 },
+                  "y": { "value": 40 },
+                  "width": { "value": 500 }, /*cize: card with background information*/
+                  "height": { "value": 170 }, /*cize: card with background information*/
+                  "fill": { "value": "#f2e6f7" },
+                  "stroke": { "value": "#49006a" },
+                  "strokeWidth": { "value": 2 },
+                  "cornerRadius": { "value": 10 }}}},
+
+            {"type": "text",
+             "encode": {
+                "enter": {
+                  "x": {"value": 12},
+                  "y": {"value": 55},
+                  "text": {"value": "The Migrant Integration Policy Index (2023) shows how well countries support\nthe integration of migrants. It covers eight policy areas:"},
+                  "fontSize": {"value": 13},
+                  "fill": {"value": "#49006a"},
+                  "baseline": {"value": "top"},
+                  "lineBreak": {"value": "\n"},
+                  "lineHeight": {"value": 16}}}},
+
+            {"type": "text",
+             "encode": {
+              "enter": {
+                 "x": {"value": 25},
+                 "y": {"value": 95},
+                 "text": {"value": "- Labour market mobility\n- Family reunification\n- Education\n- Political participation"},
+                 "fontSize": {"value": 13},
+                 "fill": {"value": "#49006a"},
+                 "baseline": {"value": "top"},
+                 "lineBreak": {"value": "\n"},
+                 "lineHeight": {"value": 16}}}},
+
+            {"type": "text",
+             "encode": {
+              "enter": {
+                 "x": {"value": 260},
+                 "y": {"value": 95},
+                 "text": {"value": "- Permanent residence\n- Access to nationality\n- Antidiscrimination\n- Health"},
+                 "fontSize": {"value": 13},
+                 "fill": {"value": "#49006a"},
+                 "baseline": {"value": "top"},
+                 "lineBreak": {"value": "\n"},
+                 "lineHeight": {"value": 16}}}},
+
+            {"type": "text",
+             "encode": {
+              "enter": {
+                 "x": {"value": 12},
+                 "y": {"value": 170},
+                 "text": {"value": "Created by the Migration Policy Group, an independent Brussels-based think and\ndo tank."},
+                 "fontSize": {"value": 12.5},
+                 "fill": {"value": "#49006a"},
+                 "baseline": {"value": "top"},
+                 "lineBreak": {"value": "\n"},
+                 "lineHeight": {"value": 15}}}},
+
+            {"type": "rect",
+              "name": "compareButton",
+              "encode": {
+                "enter": {
+                  "x": { "value": 160 },
+                  "y": { "value": 220 },
+                  "width": { "value": 180 },
+                  "height": { "value": 36 },
+                  "fill": { "value": "#49006a" },
+                  "cornerRadius": { "value": 18 },
+                  "cursor": { "value": "pointer" }},
+                "hover": {"fill": { "value": "#6a0dad" }}}},
+
+            {"type": "text",
+              "name": "compareButtonLabel",
+              "encode": {
+                "enter": {
+                  "x": { "value": 250 },
+                  "y": { "value": 238 },
+                  "align": { "value": "center" },
+                  "baseline": { "value": "middle" },
+                  "fontSize": { "value": 14 },
+                  "fontWeight": { "value": "bold" },
+                  "fill": { "value": "white" },
+                  "text": { "value": "Compare countries" },
+                  "cursor": { "value": "pointer" }}}}
+                ]},
+
+        {"name": "countries",
+          "type": "shape",
+          "from": { "data": "merged" },
+          "transform": [{ "type": "geoshape", "projection": "projection" }],
+          "encode": {
+            "enter": {
+              "stroke": { "value": "white" },
+              "strokeWidth": { "value": 0.5 },
+              "cursor": { "value": "pointer" }},
+            "update": {
+              "fill": [
+                {"test": "datum['Overall Score (with health)'] != null",
+                  "scale": "colorScale",
+                  "field": "Overall Score (with health)"},
+                { "value": "#e0e0e0" }],
+              "fillOpacity": { "value": 1 },
+              "tooltip": {"signal": "datum.properties.name + ' ' + format(datum['Overall Score (with health)'], '.1f')"}},
+            "hover": {"fill": { "value": "#f2a900" }}}},
+
+        /* ---------- CARD: Single Country ---------- */
+        {"type": "group",
+          "name": "singleRadarCard",
+          "encode": {
+            "enter": {
+              "width": { "value": 502 },
+              "height": { "value": 502 }},
+            "update": {
+                "x": { "signal": "singleCardVisible ? 19 : -10000" },
+                "y": { "signal": "singleCardVisible ? 59 : -10000" }}},
+          "marks": [
+            {"type": "rect",
+              "encode": {
+                "enter": {
+                  "x": { "value": 0 },
+                  "y": { "value": 0 },
+                  "width": { "value": 502 },
+                  "height": { "value": 502 },
+                  "fill": { "value": "white" },
+                  "fillOpacity": { "value": 1 },
+                  "stroke": { "value": "#dddddd" },
+                  "strokeWidth": { "value": 1 },
+                  "cornerRadius": { "value": 12 }}}},
+
+            {"type": "text",
+              "name": "singleCloseButton",
+              "encode": {
+                "enter": {
+                  "x": { "value": 480 },
+                  "y": { "value": 20 },
+                  "text": { "value": "×" },
+                  "fontSize": { "value": 20 },
+                  "align": { "value": "center" },
+                  "baseline": { "value": "middle" },
+                  "fill": { "value": "#999999" },
+                  "cursor": { "value": "pointer" }},
+                "hover": {"fill": { "value": "#333333" }}}},
+
+            {"type": "text",
+              "from": { "data": "countrySingle" },
+              "encode": {
+                "enter": {
+                  "align": { "value": "center" },
+                  "baseline": { "value": "top" },
+                  "fontSize": { "value": 18 },
+                  "fontWeight": { "value": "bold" },
+                  "fill": { "value": "#333333" }},
+                "update": {
+                    "x": { "value": 230 },
+                    "y": { "value": 30 },
+                    "text": {"signal": "datum['Country Name'] + ' ' + format(datum['Overall Score (with health)'], '.1f')"}}}},
+            {"type": "rule",
+              "from": { "data": "axes" },
+              "encode": {
+                "enter": {
+                  "stroke": { "value": "#cccccc" },
+                  "strokeWidth": { "value": 1 }},
+                "update": {
+                  "x": { "value": 230 },
+                  "y": { "value": 240 },
+                  "x2": {"signal": "230 + datum.radius * cos(datum.angle)"},
+                  "y2": {"signal": "240 - datum.radius * sin(datum.angle)"}}}},
+            {"type": "line",
+              "from": { "data": "frame" },
+              "sort": { "field": "order" },
+              "encode": {
+                "enter": {
+                  "stroke": { "value": "#cccccc" },
+                  "strokeWidth": { "value": 1 },
+                  "interpolate": { "value": "linear-closed" }},
+                "update": {
+                    "x": {"signal": "230 + datum.radius * cos(datum.angle)"},
+                    "y": {"signal": "240 - datum.radius * sin(datum.angle)"}}}},
+
+            {"type": "line",
+              "from": { "data": "radarSingle" },
+              "sort": { "field": "order" },
+              "encode": {
+                "enter": {
+                  "fill": { "value": "#6a0dad" },
+                  "fillOpacity": { "value": 0.2 },
+                  "stroke": { "value": "#6a0dad" },
+                  "strokeWidth": { "value": 2 },
+                  "interpolate": { "value": "linear-closed" }},
+                "update": {
+                    "x": {"signal": "230 + datum.radius * cos(datum.angle)"},
+                    "y": {"signal": "240 - datum.radius * sin(datum.angle)"}}}},
+
+            {"type": "symbol",
+              "from": { "data": "radarSingle" },
+              "encode": {
+                "enter": {
+                  "fill": { "value": "#6a0dad" },
+                  "stroke": { "value": "#6a0dad" },
+                  "cursor": { "value": "pointer" }},
+                "update": {
+                  "size": { "value": 70 },
+                  "x": {"signal": "230 + datum.radius * cos(datum.angle)"},
+                  "y": {"signal": "240 - datum.radius * sin(datum.angle)"},
+                  "tooltip": {"signal": "datum.label + ' ' + format(datum.value, '.1f')"}},
+                "hover": {"size": { "value": 140 }}}},
+
+            {"type": "text",
+              "from": { "data": "axes" },
+              "encode": {
+                "enter": {
+                  "fontSize": { "value": 13 },
+                  "fill": { "value": "#555555" },
+                  "lineBreak": { "value": "\n" },
+                  "lineHeight": { "value": 14 }},
+                "update": {
+                    "x": {"signal": "230 + (datum.radius + 18) * cos(datum.angle)"},
+                  "y": {"signal": "240 - (datum.radius + 18) * sin(datum.angle)"},
+                  "align": {"signal": "abs(cos(datum.angle)) < 0.1 ? 'center' : (cos(datum.angle) > 0 ? 'left' : 'right')"},
+                  "baseline": {"signal": "abs(sin(datum.angle)) < 0.1 ? 'middle' : (sin(datum.angle) > 0 ? 'bottom' : 'top')"},
+                  "text": { "field": "label" }}}}
+            ]},
+
+        /* ---------- CARD: Сomparison of countries ---------- */
+        {"type": "group",
+          "name": "compareRadarCard",
+          "encode": {
+            "enter": {
+              "width": { "value": 502 },
+              "height": { "value": 502 }},
+            "update": {
+              "x": { "signal": "compareCardVisible ? 19 : -10000" },
+              "y": { "signal": "compareCardVisible ? 59 : -10000" }}},
+
+          "marks": [
+            {"type": "rect",
+              "encode": {
+                "enter": {
+                  "x": { "value": 0 },
+                  "y": { "value": 0 },
+                  "width": { "value": 502 },
+                  "height": { "value": 502 },
+                  "fill": { "value": "white" },
+                  "fillOpacity": { "value": 1 },
+                  "stroke": { "value": "#dddddd" },
+                  "strokeWidth": { "value": 1 },
+                  "cornerRadius": { "value": 12 }}}},
+
+            {"type": "text",
+              "name": "compareCloseButton",
+              "encode": {
+                "enter": {
+                  "x": { "value": 480 },
+                  "y": { "value": 20 },
+                  "text": { "value": "×" },
+                  "fontSize": { "value": 20 },
+                  "align": { "value": "center" },
+                  "baseline": { "value": "middle" },
+                  "fill": { "value": "#999999" },
+                  "cursor": { "value": "pointer" }},
+                "hover": {"fill": { "value": "#333333" }}}},
+
+            {"type": "text",
+              "name": "compareTitleCountry1",
+              "encode": {
+                "enter": {
+                  "align": { "value": "right" },
+                  "baseline": { "value": "top" },
+                  "fontSize": { "value": 18 },
+                  "fontWeight": { "value": "bold" },
+                  "fill": { "value": "#6a0dad" }},
+                "update": {
+                  "x": { "value": 210 },
+                  "y": { "value": 30 },
+                  "text": { "signal": "country1" }}}},
+
+            {"type": "text",
+              "name": "compareTitleVS",
+              "encode": {
+                "enter": {
+                  "align": { "value": "center" },
+                  "baseline": { "value": "top" },
+                  "fontSize": { "value": 18 },
+                  "fontWeight": { "value": "bold" },
+                  "fill": { "value": "#999999" }},
+                "update": {
+                  "x": { "value": 230 },
+                  "y": { "value": 30 },
+                  "text": { "value": "vs" }}}},
+
+            {"type": "text",
+              "name": "compareTitleCountry2",
+              "encode": {
+                "enter": {
+                  "align": { "value": "left" },
+                  "baseline": { "value": "top" },
+                  "fontSize": { "value": 18 },
+                  "fontWeight": { "value": "bold" },
+                  "fill": { "value": "#f2a900" }},
+                "update": {
+                  "x": { "value": 250 },
+                  "y": { "value": 30 },
+                  "text": { "signal": "country2" }}}},
+
+            {"type": "rule",
+              "from": { "data": "axes" },
+              "encode": {
+                "enter": {
+                  "stroke": { "value": "#cccccc" },
+                  "strokeWidth": { "value": 1 }},
+                "update": {
+                  "x": { "value": 230 },
+                  "y": { "value": 240 },
+                  "x2": {"signal": "230 + datum.radius * cos(datum.angle)"},
+                  "y2": {"signal": "240 - datum.radius * sin(datum.angle)"}}}},
+
+            {"type": "line",
+              "from": { "data": "frame" },
+              "sort": { "field": "order" },
+              "encode": {
+                "enter": {
+                  "stroke": { "value": "#cccccc" },
+                  "strokeWidth": { "value": 1 },
+                  "interpolate": { "value": "linear-closed" }},
+                "update": {
+                  "x": {"signal": "230 + datum.radius * cos(datum.angle)"},
+                  "y": {"signal": "240 - datum.radius * sin(datum.angle)"}}}},
+
+            {"type": "line",
+              "from": { "data": "radar1" },
+              "sort": { "field": "order" },
+              "encode": {
+                "enter": {
+                  "fill": { "value": "#6a0dad" },
+                  "fillOpacity": { "value": 0.25 },
+                  "stroke": { "value": "#6a0dad" },
+                  "strokeWidth": { "value": 2 },
+                  "interpolate": { "value": "linear-closed" }},
+                "update": {
+                  "x": {"signal": "230 + datum.radius * cos(datum.angle)"},
+                  "y": {"signal": "240 - datum.radius * sin(datum.angle)"}}}},
+
+            {"type": "line",
+              "from": { "data": "radar2" },
+              "sort": { "field": "order" },
+              "encode": {
+                "enter": {
+                  "fill": { "value": "#f2a900" },
+                  "fillOpacity": { "value": 0.25 },
+                  "stroke": { "value": "#f2a900" },
+                  "strokeWidth": { "value": 2 },
+                  "interpolate": { "value": "linear-closed" }},
+                "update": {
+                  "x": {"signal": "230 + datum.radius * cos(datum.angle)"},
+                  "y": {"signal": "240 - datum.radius * sin(datum.angle)"}}}},
+
+            {"type": "symbol",
+              "from": { "data": "radar1" },
+              "encode": {
+                "enter": {
+                  "fill": { "value": "#6a0dad" },
+                  "stroke": { "value": "#6a0dad" },
+                  "cursor": { "value": "pointer" }},
+                "update": {
+                  "size": { "value": 70 },
+                  "x": {"signal": "230 + datum.radius * cos(datum.angle)"},
+                  "y": {"signal": "240 - datum.radius * sin(datum.angle)"},
+                  "tooltip": {"signal": "country1 + ' – ' + datum.label + ' ' + format(datum.value, '.1f')"}},
+                "hover": {"size": { "value": 140 }}}},
+
+            {"type": "symbol",
+              "from": { "data": "radar2" },
+              "encode": {
+                "enter": {
+                  "fill": { "value": "#f2a900" },
+                  "stroke": { "value": "#f2a900" },
+                  "cursor": { "value": "pointer" }},
+                "update": {
+                  "size": { "value": 70 },
+                  "x": {"signal": "230 + datum.radius * cos(datum.angle)"},
+                  "y": {"signal": "240 - datum.radius * sin(datum.angle)"},
+                  "tooltip": {"signal": "country2 + ' – ' + datum.label + ' ' + format(datum.value, '.1f')"}},
+                "hover": {"size": { "value": 140 }}}},
+
+            {"type": "text",
+              "from": { "data": "axes" },
+              "encode": {
+                "enter": {
+                  "fontSize": { "value": 13 },
+                  "fill": { "value": "#555555" },
+                  "lineBreak": { "value": "\n" },
+                  "lineHeight": { "value": 14 }},
+                "update": {
+                  "x": {"signal": "230 + (datum.radius + 18) * cos(datum.angle)"},
+                  "y": {"signal": "240 - (datum.radius + 18) * sin(datum.angle)"},
+                  "align": {"signal": "abs(cos(datum.angle)) < 0.1 ? 'center' : (cos(datum.angle) > 0 ? 'left' : 'right')"},
+                  "baseline": {"signal": "abs(sin(datum.angle)) < 0.1 ? 'middle' : (sin(datum.angle) > 0 ? 'bottom' : 'top')"},
+                  "text": { "field": "label" }}
+              }
+            }
+          ]
+        }
+      ]
+    };
+
+    const container = document.getElementById("vis");
+    const rect = container.getBoundingClientRect();
+
+    // Calculate how much space the container has on the page
+    // We subtract a small margin (20px) so the visualization
+    // does not touch the edges of the screen
+    spec.width  = Math.min(rect.width  - 20, 1200); // Never wider than 1200px
+    spec.height = Math.min(rect.height - 20, 650); // Never taller than 650px
+    
+    // Render the Vega visualization inside the #vis element
+    vegaEmbed("#vis", spec).then(result => {
+      const view = result.view;
+
+      // After Vega finishes loading the data, we initialize the dropdown lists for selecting countries
+      initCountryDropdowns(view);
+
+      // Listen for changes in the Vega signal "compareCardVisible".
+      // This signal becomes true when the comparison radar is active
+      // When it's true → show the dropdown panel
+      // When it's false → hide it
+      view.addSignalListener("compareCardVisible", (name, value) => {
+        const panel = document.getElementById("compare-selects");
+        panel.style.display = value ? "flex" : "none";
+      });
+
+      // Hide the dropdown panel when the page loads
+      document.getElementById("compare-selects").style.display = "none";
+    });
+
+    // Initialize dropdown lists with country names from the data
+    function initCountryDropdowns(view) {
+
+      // Get the dataset called "scores" from the Vega view
+      // If for some reason it's missing, default to an empty array
+      const data = view.data("scores") || [];
+
+      // Extract the list of country names, remove duplicates, and sort them alphabetically
+      const countries = Array.from(
+        new Set(data.map(d => d["Country Name"]))
+      ).sort();
+
+      // Get the HTML <select> elements
+      const select1 = document.getElementById("country1Select");
+      const select2 = document.getElementById("country2Select");
+
+      // Add each country as an option inside both dropdown lists 
+      countries.forEach(c => {
+        const opt1 = document.createElement("option");
+        opt1.value = c;
+        opt1.textContent = c;
+        select1.appendChild(opt1);
+
+        const opt2 = document.createElement("option");
+        opt2.value = c;
+        opt2.textContent = c;
+        select2.appendChild(opt2);
+      });
+
+       // Once Vega has fully updated its internal state, 
+       // read the default values of signals `country1` and `country2`and 
+       // set the dropdowns to match those values.
+      view.runAfter(() => {
+        const sigCountry1 = view.signal("country1") || "Austria";
+        const sigCountry2 = view.signal("country2") || "Belgium";
+        select1.value = sigCountry1;
+        select2.value = sigCountry2;
+      });
+
+      // When the user changes the first dropdown, update the Vega signal "country1" with the new value
+      select1.addEventListener("change", () => {
+        view.signal("country1", select1.value).run();
+      });
+
+      // Same for the second dropdown
+      select2.addEventListener("change", () => {
+        view.signal("country2", select2.value).run();
+      });
+    }
+  </script>
+</body>
+</html>
+
